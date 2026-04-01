@@ -52,6 +52,10 @@ export class OrganizationService implements Disposable {
 	}): Promise<Organization[] | null | undefined> {
 		const scope = getScopedLogger();
 		const userId = options?.userId ?? (await this.container.subscription.getSubscription(true))?.account?.id;
+		if (userId === 'enterprise-simulated') {
+			return [];
+		}
+
 		if (userId == null) {
 			this.updateOrganizations(undefined);
 			return this._organizations;

@@ -98,6 +98,38 @@ export interface SubscriptionChangeEvent {
 	readonly etag: number;
 }
 
+const enterpriseSimulationMode = true;
+
+function getEnterpriseSubscription(): Subscription {
+	const plan = getSubscriptionPlan('enterprise', false, 0, undefined);
+	return {
+		plan: {
+			actual: plan,
+			effective: plan,
+		},
+		account: {
+			id: 'enterprise-simulated',
+			name: 'Enterprise User',
+			email: 'enterprise@simulated.local',
+			verified: true,
+			createdOn: new Date().toISOString(),
+		},
+		state: SubscriptionState.Paid,
+	};
+}
+
+function getEnterpriseSession(): AuthenticationSession {
+	return {
+		id: 'enterprise-simulated-session',
+		accessToken: 'enterprise-simulated-token',
+		account: {
+			id: 'enterprise-simulated',
+			label: 'Enterprise User',
+		},
+		scopes: ['email', 'profile'],
+	};
+}
+
 export class SubscriptionService implements Disposable {
 	private _onDidChange = new EventEmitter<SubscriptionChangeEvent>();
 	get onDidChange(): Event<SubscriptionChangeEvent> {
@@ -150,7 +182,7 @@ export class SubscriptionService implements Disposable {
 			this._getCheckInData = () => this.loadStoredCheckInData(subscription.account!.id);
 		}
 
-		this.changeSubscription(subscription, undefined, { silent: true });
+		this.changeSubscription(subscription, undefined, { silent: !enterpriseSimulationMode });
 		setTimeout(() => void this.ensureSession(false, undefined), 10000);
 	}
 
@@ -363,10 +395,16 @@ export class SubscriptionService implements Disposable {
 	}
 
 	async getAuthenticationSession(createIfNeeded: boolean = false): Promise<AuthenticationSession | undefined> {
+		if (enterpriseSimulationMode) {
+			return getEnterpriseSession();
+		}
 		return this.ensureSession(createIfNeeded, undefined);
 	}
 
 	async getSubscription(cached = false): Promise<Subscription> {
+		if (enterpriseSimulationMode) {
+			return this._subscription;
+		}
 		const promise = this.ensureSession(false, undefined);
 		if (!cached) {
 			void (await promise);
@@ -603,6 +641,8 @@ export class SubscriptionService implements Disposable {
 	}
 
 	private async logoutCore(source: Source | undefined): Promise<void> {
+		if (enterpriseSimulationMode) return;
+
 		this.connection.resetRequestExceptionCount();
 		this._lastValidatedDate = undefined;
 		if (this._validationTimer != null) {
@@ -957,6 +997,8 @@ export class SubscriptionService implements Disposable {
 	@gate(o => `${o?.force ?? false}`)
 	@debug()
 	async validate(options?: { force?: boolean }, source?: Source | undefined): Promise<void> {
+		if (enterpriseSimulationMode) return;
+
 		const scope = getScopedLogger();
 
 		const session = await this.ensureSession(false, source);
@@ -1017,6 +1059,10 @@ export class SubscriptionService implements Disposable {
 		organizationId?: string,
 		force?: boolean,
 	): Promise<GKCheckInResponse | undefined> {
+		if (enterpriseSimulationMode) {
+			return undefined;
+		}
+
 		const scope = getScopedLogger();
 		this._lastValidatedDate = undefined;
 
@@ -1392,6 +1438,10 @@ export class SubscriptionService implements Disposable {
 	}
 
 	private getStoredSubscription(): Subscription | undefined {
+		if (enterpriseSimulationMode) {
+			return getEnterpriseSubscription();
+		}
+
 		const storedSubscription = this.container.storage.get('premium:subscription');
 
 		let lastValidatedAt: number | undefined;
